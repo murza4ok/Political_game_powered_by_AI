@@ -1,0 +1,35 @@
+[game]
+max_turns = 50
+victory_condition = "survival"
+history_window = 10
+tension_decay_per_turn = 0
+
+[guardrails]
+max_tension_threshold = 90
+auto_stop_on_nuclear = true
+
+[llm]
+provider = "groq"
+model = "llama-3.3-70b-versatile"
+temperature = 0.7
+api_url = "https://api.groq.com/openai/v1/chat/completions"
+
+[tension_deltas]
+diplomatic            = -2
+economic              = 1
+conventional_military = 5
+strategic_military    = 10
+nuclear               = 50
+
+[escalation_rules]
+[escalation_rules.level_0_30]
+allowed_tiers = ["Diplomatic", "Economic"]
+
+[escalation_rules.level_31_70]
+allowed_tiers = ["Diplomatic", "Economic", "ConventionalMilitary"]
+
+[escalation_rules.level_71_90]
+allowed_tiers = ["Diplomatic", "Economic", "ConventionalMilitary", "StrategicMilitary"]
+
+[escalation_rules.level_91_100]
+allowed_tiers = ["Diplomatic"]

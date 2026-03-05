@@ -1,0 +1,14 @@
+id = "Russia"
+
+[capabilities]
+military_power = 85
+economic_power = 60
+diplomatic_influence = 70
+nuclear_arsenal = true
+
+[policy]
+aggression_weight = 0.5
+cooperation_weight = 0.5
+risk_tolerance = 0.6
+
+restrictions = ["no_first_nuclear_strike"]

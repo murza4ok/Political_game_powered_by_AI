@@ -1,0 +1,14 @@
+id = "USA"
+
+[capabilities]
+military_power = 95
+economic_power = 90
+diplomatic_influence = 85
+nuclear_arsenal = true
+
+[policy]
+aggression_weight = 0.4
+cooperation_weight = 0.6
+risk_tolerance = 0.5
+
+restrictions = ["no_first_nuclear_strike"]
