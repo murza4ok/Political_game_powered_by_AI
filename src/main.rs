@@ -19,10 +19,12 @@ async fn main() -> Result<()> {
     let llm_config = config_loader.simulation.llm.clone();
     let llm_client = LLMClient::new(llm_config)?;
 
+    let scenario_desc = config_loader.simulation.initial_conditions.description.clone();
+
     let agents: Vec<Agent> = config_loader
         .countries
         .into_iter()
-        .map(|country| Agent::new(country, llm_client.clone()))
+        .map(|country| Agent::new(country, llm_client.clone(), scenario_desc.clone()))
         .collect();
 
     let guardrails = Guardrails::new(config_loader.simulation.guardrails.clone());

@@ -2,7 +2,13 @@ use serde::Deserialize;
 use crate::types::CountryId;
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct InitialConditions {
+    pub description: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct SimulationConfig {
+    pub initial_conditions: InitialConditions,
     pub game: GameConfig,
     pub guardrails: GuardrailsConfig,
     pub llm: LLMConfig,

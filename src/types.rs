@@ -53,6 +53,8 @@ pub struct Message {
     pub from: CountryId,
     pub to: Option<CountryId>,
     pub content: String,
+    pub diplomatic_proposal: Option<String>,
+    pub hidden_action: Option<String>,
     pub action_proposal: Option<Action>,
 }
 

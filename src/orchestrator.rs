@@ -106,6 +106,8 @@ impl Orchestrator {
                             "turn": turn,
                             "agent": msg.from.0,
                             "content": msg.content,
+                            "diplomatic_proposal": msg.diplomatic_proposal,
+                            "hidden_action": msg.hidden_action,
                             "raw_action": msg.action_proposal.as_ref().map(|a| {
                                 json!({
                                     "tier": a.tier.as_str(),
