@@ -20,7 +20,7 @@ political_game_agent/
 │   ├── config.rs              # Структуры конфигурации
 │   ├── config_loader.rs       # Загрузка TOML-файлов
 │   ├── types.rs               # Ключевые типы данных (Message, Action, WorldState…)
-│   ├── llm.rs                 # HTTP-клиент для Groq API (retry, timeout)
+│   ├── llm.rs                 # HTTP-клиент для DeepSeek API (retry, timeout)
 │   ├── guardrails.rs          # Ограничители (ядерный порог, запрещённые действия)
 │   ├── state.rs               # Менеджер состояния мира (напряжённость, отношения)
 │   ├── orchestrator.rs        # Главный цикл симуляции, логирование
@@ -29,7 +29,7 @@ political_game_agent/
 │       └── agent.rs           # LLM-агент: системный промпт, парсинг ответа
 ├── results/                   # Логи сессий в формате JSONL
 ├── Cargo.toml
-└── .env                       # GROQ_API_KEY (не коммитить)
+└── .env                       # DEEPSEEK_API_KEY (не коммитить)
 ```
 
 ---
@@ -39,14 +39,14 @@ political_game_agent/
 ### 1. Требования
 
 - [Rust](https://rustup.rs/) 1.75+
-- Аккаунт [Groq](https://console.groq.com/) и API-ключ
+- Аккаунт [DeepSeek](https://platform.deepseek.com/) и API-ключ
 
 ### 2. Настройка API-ключа
 
 Создайте файл `.env` в корне проекта:
 
 ```env
-GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxxxxx
+DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 ### 3. Запуск
@@ -89,8 +89,8 @@ cargo run
 
 | Поле          | Тип   | Описание                                               |
 |---------------|-------|--------------------------------------------------------|
-| `provider`    | str   | Провайдер LLM (`"groq"`)                               |
-| `model`       | str   | Идентификатор модели (`"llama-3.3-70b-versatile"`)     |
+| `provider`    | str   | Провайдер LLM (`"deepseek"`)                           |
+| `model`       | str   | Идентификатор модели (`"deepseek-chat"`)                |
 | `temperature` | float | Температура генерации (0.0 — детерминированно, 1.0+ — творчески) |
 | `api_url`     | str   | URL API-эндпоинта                                      |
 

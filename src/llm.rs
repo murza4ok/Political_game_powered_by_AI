@@ -15,7 +15,7 @@ pub struct LLMClient {
 }
 
 #[derive(Debug, Serialize, Clone)]
-struct GroqRequest {
+struct LLMRequest {
     model: String,
     messages: Vec<Message>,
     temperature: f32,
@@ -28,7 +28,7 @@ struct Message {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-struct GroqResponse {
+struct LLMResponse {
     choices: Option<Vec<Choice>>,
 }
 
@@ -44,13 +44,13 @@ struct ResponseMessage {
 
 impl LLMClient {
     pub fn new(config: LLMConfig) -> Result<Self> {
-        let api_key = env::var("GROQ_API_KEY")
-            .context("GROQ_API_KEY not found in .env. Get one at https://console.groq.com/keys")?;
+        let api_key = env::var("DEEPSEEK_API_KEY")
+            .context("DEEPSEEK_API_KEY not found in .env. Get one at https://platform.deepseek.com/api_keys")?;
 
         let api_url = config
             .api_url
             .clone()
-            .unwrap_or_else(|| "https://api.groq.com/openai/v1/chat/completions".into());
+            .unwrap_or_else(|| "https://api.deepseek.com/v1/chat/completions".into());
 
         Ok(Self {
             client: Client::new(),
@@ -61,12 +61,12 @@ impl LLMClient {
     }
 
     pub async fn generate_content(&self, system_prompt: &str, user_message: &str) -> Result<String> {
-        self.generate_groq(system_prompt, user_message).await
+        self.generate(&system_prompt, &user_message).await
     }
 
     /// Отправляет запрос к LLM с повторными попытками при rate limit (429) или таймауте.
     /// Стратегия: до 3 повторных попыток с экспоненциальной задержкой 2s → 4s → 8s.
-    async fn generate_groq(&self, system_prompt: &str, user_message: &str) -> Result<String> {
+    async fn generate(&self, system_prompt: &str, user_message: &str) -> Result<String> {
         const MAX_RETRIES: u32 = 3;
         const REQUEST_TIMEOUT_SECS: u64 = 30;
         const RETRY_DELAYS: [u64; 3] = [2, 4, 8];
@@ -109,7 +109,7 @@ impl LLMClient {
     }
 
     async fn send_request(&self, system_prompt: &str, user_message: &str) -> Result<String> {
-        let req_body = GroqRequest {
+        let req_body = LLMRequest {
             model: self.config.model.clone(),
             messages: vec![
                 Message {
@@ -132,7 +132,7 @@ impl LLMClient {
             .json(&req_body)
             .send()
             .await
-            .context("Failed to send request to Groq API")?;
+            .context("Failed to send request to DeepSeek API")?;
 
         let status = response.status();
 
@@ -146,12 +146,12 @@ impl LLMClient {
             anyhow::bail!("API Error {}: {}", status, error_text);
         }
 
-        let groq_resp: GroqResponse = response
+        let llm_resp: LLMResponse = response
             .json()
             .await
             .context("Failed to parse API response")?;
 
-        groq_resp
+        llm_resp
             .choices
             .and_then(|c| c.first().cloned())
             .and_then(|c| c.message)
