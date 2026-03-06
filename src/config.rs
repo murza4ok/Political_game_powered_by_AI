@@ -46,7 +46,7 @@ pub struct LLMConfig {
     pub provider: String,
     pub model: String,
     pub temperature: f32,
-    /// URL API. По умолчанию — Groq endpoint.
+    /// URL API. По умолчанию — DeepSeek endpoint.
     pub api_url: Option<String>,
 }
 
