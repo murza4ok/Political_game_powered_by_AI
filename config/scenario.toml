@@ -13,16 +13,18 @@ max_turns = 50
 victory_condition = "survival"
 history_window = 10
 tension_decay_per_turn = 0
+# Продолжительность хода в часах: 720 = ~1 месяц, 48, 12, 6 — по мере нарастания кризиса
+turn_duration_hours = 720
 
 [guardrails]
 max_tension_threshold = 90
 auto_stop_on_nuclear = true
 
 [llm]
-provider = "groq"
-model = "llama-3.3-70b-versatile"
+provider = "deepseek"
+model = "deepseek-chat"
 temperature = 0.7
-api_url = "https://api.groq.com/openai/v1/chat/completions"
+api_url = "https://api.deepseek.com/chat/completions"
 
 [tension_deltas]
 diplomatic            = -2

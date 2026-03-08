@@ -4,7 +4,7 @@ use crate::guardrails::Guardrails;
 use crate::state::StateManager;
 use crate::types::ActionTier;
 use anyhow::Result;
-use chrono::Utc;
+use chrono::{Datelike, NaiveDate, Duration as ChronoDuration, Utc};
 use serde_json::json;
 use std::fs::{create_dir_all, File};
 use std::io::{BufWriter, Write};
@@ -18,6 +18,35 @@ pub struct Orchestrator {
     pub guardrails: Guardrails,
     log_file: BufWriter<File>,
     history: Vec<crate::types::Message>,
+    /// Накопленные игровые часы с начала симуляции
+    in_game_hours_elapsed: u64,
+}
+
+/// Форматирует игровую дату в виде "DD мес YYYY"
+fn fmt_date_ru(d: NaiveDate) -> String {
+    let months = [
+        "янв", "фев", "мар", "апр", "май", "июн",
+        "июл", "авг", "сен", "окт", "ноя", "дек",
+    ];
+    format!("{} {} {}", d.day(), months[(d.month() - 1) as usize], d.year())
+}
+
+/// Строит метку периода хода: "DD мес YYYY — DD мес YYYY (~1 месяц / 48 ч / ...)"
+fn game_period_label(hours_elapsed: u64, duration_hours: u64) -> String {
+    // Симуляция стартует 1 января 2025
+    let base = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+    let start = base + ChronoDuration::hours(hours_elapsed as i64);
+    let end   = base + ChronoDuration::hours((hours_elapsed + duration_hours) as i64);
+
+    let duration_str = match duration_hours {
+        h if h >= 600 => "~1 месяц".to_string(),
+        48            => "48 часов".to_string(),
+        12            => "12 часов".to_string(),
+        6             => "6 часов".to_string(),
+        h             => format!("{} ч", h),
+    };
+
+    format!("{} — {} ({})", fmt_date_ru(start), fmt_date_ru(end), duration_str)
 }
 
 impl Orchestrator {
@@ -38,6 +67,7 @@ impl Orchestrator {
             guardrails,
             log_file,
             history: Vec::new(),
+            in_game_hours_elapsed: 0,
         })
     }
 
@@ -72,14 +102,19 @@ impl Orchestrator {
         let history_window = self.config.game.history_window;
 
         for turn in 0..self.config.game.max_turns {
+            let turn_duration_hours = self.config.game.turn_duration_hours as u64;
+            let period = game_period_label(self.in_game_hours_elapsed, turn_duration_hours);
+
             let tension_before = self.state_manager.get_tension_level();
-            info!("=== Turn {} ===", turn);
+            info!("=== Turn {} | Period: {} ===", turn, period);
             info!("Current tension level: {}", tension_before);
-            println!("\n=== Turn {} | tension={} ===", turn, tension_before);
+            println!("\n=== Ход {} | {} | tension={} ===", turn, period, tension_before);
 
             self.log_json(json!({
                 "type": "turn_start",
                 "turn": turn,
+                "period": period,
+                "turn_duration_hours": turn_duration_hours,
                 "tension_before": tension_before,
                 "timestamp": Utc::now(),
             }));
@@ -96,14 +131,20 @@ impl Orchestrator {
 
             // Первый проход: собираем действия от всех агентов
             for agent in &self.agents {
-                match agent.process_turn(&self.state_manager.state, &self.history, history_window).await {
+                match agent.process_turn(
+                    &self.state_manager.state,
+                    &self.history,
+                    history_window,
+                    &period,
+                ).await {
                     Ok(msg) => {
                         info!("{}: {}", msg.from.0, msg.content);
-                        println!("[{}] {}", msg.from.0, msg.content);
+                        println!("\n[{}]\n{}", msg.from.0, msg.content);
 
                         turn_log_events.push(json!({
                             "type": "agent_message",
                             "turn": turn,
+                            "period": period,
                             "agent": msg.from.0,
                             "content": msg.content,
                             "diplomatic_proposal": msg.diplomatic_proposal,
@@ -131,6 +172,8 @@ impl Orchestrator {
                                     "tension": self.state_manager.get_tension_level(),
                                     "timestamp": Utc::now(),
                                 }));
+                                // Сообщение всё равно добавляем в историю
+                                self.history.push(msg);
                                 continue;
                             }
 
@@ -149,6 +192,7 @@ impl Orchestrator {
                                     "tension": self.state_manager.get_tension_level(),
                                     "timestamp": Utc::now(),
                                 }));
+                                self.history.push(msg);
                                 continue;
                             }
 
@@ -221,7 +265,7 @@ impl Orchestrator {
                 }));
 
                 println!(
-                    "[DECISION][Turn {}][{}][{}] {} (tension: {} -> {})",
+                    "[РЕШЕНИЕ][Ход {}][{}][{}] {} (tension: {} -> {})",
                     turn,
                     action.country.0,
                     action.tier.as_str(),
@@ -234,10 +278,15 @@ impl Orchestrator {
             self.state_manager.next_turn(self.config.game.tension_decay_per_turn);
             let tension_after = self.state_manager.get_tension_level();
 
+            // Продвигаем игровое время
+            self.in_game_hours_elapsed += turn_duration_hours;
+
             self.log_json(json!({
                 "type": "turn_end",
                 "turn": turn,
+                "period": period,
                 "tension_after": tension_after,
+                "in_game_hours_elapsed": self.in_game_hours_elapsed,
                 "relationships": self.state_manager.state.relationships,
                 "timestamp": Utc::now(),
             }));
