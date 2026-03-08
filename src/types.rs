@@ -66,4 +66,8 @@ pub struct WorldState {
     pub turn_count: u32,
     pub active_conflicts: Vec<String>,
     pub relationships: HashMap<String, i8>,
+    /// Очки влияния каждой страны — конкурентный счёт (ненулевая сумма).
+    pub influence_scores: HashMap<String, i32>,
+    /// Внутренняя стабильность каждой страны: 0 (распад) — 100 (монолит).
+    pub stability: HashMap<String, u8>,
 }

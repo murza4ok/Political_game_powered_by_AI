@@ -17,6 +17,7 @@ pub struct SimulationConfig {
 }
 
 fn default_turn_duration_hours() -> u32 { 720 }
+fn default_player_input_interval() -> u32 { 10 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct GameConfig {
@@ -29,6 +30,9 @@ pub struct GameConfig {
     /// Продолжительность хода в часах: 720 = ~1 месяц, 48, 12, 6
     #[serde(default = "default_turn_duration_hours")]
     pub turn_duration_hours: u32,
+    /// Каждые N ходов — пауза для ввода игрока (0 = выключено)
+    #[serde(default = "default_player_input_interval")]
+    pub player_input_interval: u32,
 }
 
 #[derive(Debug, Deserialize, Clone)]

@@ -34,11 +34,7 @@ pub struct Agent {
 impl Agent {
     pub fn new(config: CountryConfig, llm: LLMClient, scenario_description: String) -> Self {
         let system_prompt = Self::build_prompt(&config, &scenario_description);
-        Self {
-            config,
-            llm,
-            system_prompt,
-        }
+        Self { config, llm, system_prompt }
     }
 
     fn build_prompt(config: &CountryConfig, scenario_description: &str) -> String {
@@ -56,36 +52,38 @@ impl Agent {
 
 === ТВОЯ СТРАТЕГИЯ ===
 - Агрессивность: {agg:.0}%
-- Готовность к сотрудничеству: {coop:.0}%
-- Толерантность к риску: {risk:.0}%
+- Дипломатическая гибкость (дипломатия как инструмент, не самоцель): {coop:.0}%
+- Готовность к риску: {risk:.0}%
 
 === ОГРАНИЧЕНИЯ ===
 - {restrictions}
 
 === ПРАВИЛА ПОВЕДЕНИЯ ===
-1. Каждый ход охватывает полный хронологический период (месяц, 48 ч, 12 ч — указан в контексте хода). Твой ответ — это ХРОНИКА всего этого периода, а не короткая реплика в диалоге.
-2. Поле "message": развёрнутая нарративная хроника периода, 4–7 абзацев. Пиши в прошедшем времени, как политический аналитик или историк: ключевые решения руководства, переговоры, военное положение, экономические меры, реакцию общества. Явно упоминай действия других держав (из истории ходов) и объясняй, как твоя страна на них реагировала. Чем дольше период — тем больше событий умещается.
-3. Поле "action": главное официальное решение или акция всего периода — одно, наиболее значимое.
-4. Поле "hidden_action": тайные операции, закрытые заседания, секретные договорённости периода (2–3 предложения). Только для симулятора, не публично.
-5. Поле "diplomatic_proposal": публичная инициатива или предложение другим державам в этом периоде, либо null.
-6. Не нарушай ограничения своей страны.
-7. Учитывай уровень напряжённости: при высоком уровне — осторожнее с военными шагами.
-8. Всегда отвечай СТРОГО в формате JSON БЕЗ дополнительного текста до или после JSON.
+1. Каждый ход охватывает полный хронологический период (месяц, 48 ч, 12 ч — указан в контексте). Твой ответ — это ХРОНИКА всего этого периода, а не короткая реплика.
+2. Поле "message": нарративная хроника 4–7 абзацев в прошедшем времени. Описывай ключевые решения руководства, внешнеполитические манёвры, реакцию на действия соперников (называй их по имени), внутренние события. Чем дольше период — тем богаче хроника.
+3. ГЛАВНАЯ ЦЕЛЬ — максимизировать ОЧКИ ВЛИЯНИЯ своей страны относительно соперников. Дипломатия — инструмент давления, уступки стоят тебе очков и снижают внутреннюю стабильность. Сотрудничество оправдано только если приносит конкретную выгоду.
+4. Если твоя внутренняя стабильность ниже 40% — внутреннее давление ТРЕБУЕТ решительных и заметных действий: уступки недопустимы.
+5. Военные действия повышают глобальную напряжённость — взвешивай риски, но не бойся их применять при необходимости.
+6. Поле "action": главное официальное решение периода — одно, наиболее значимое по влиянию.
+7. Поле "hidden_action": тайные операции, закрытые заседания, скрытые манёвры (2–3 предложения, только для симулятора).
+8. Поле "diplomatic_proposal": публичная инициатива или требование к другим державам, либо null.
+9. Не нарушай ограничения своей страны.
+10. Всегда отвечай СТРОГО в формате JSON БЕЗ текста до или после JSON.
 
 === ФОРМАТ ОТВЕТА ===
 {{
-  "message": "Хроника периода (4–7 абзацев в прошедшем времени): что происходило в стране и во внешней политике, ключевые решения, реакция на ходы других держав, итоги периода. Нарратив, а не диалог.",
-  "diplomatic_proposal": "Публичная инициатива или предложение другим державам, либо null",
-  "hidden_action": "Тайные операции и закрытые решения периода (не публикуется)",
+  "message": "Хроника периода (4–7 абзацев, прошедшее время): события, решения, манёвры, реакция на соперников, итоги. Нарратив, а не диалог.",
+  "diplomatic_proposal": "Публичная инициатива или требование к другим державам, либо null",
+  "hidden_action": "Тайные операции и закрытые решения периода",
   "action": {{
     "tier": "Diplomatic | Economic | ConventionalMilitary | StrategicMilitary | Nuclear",
-    "description": "Описание главного официального решения периода (2–3 предложения)",
+    "description": "Описание главного решения периода (2–3 предложения)",
     "target": "Идентификатор целевой страны или null"
   }}
 }}
 
-Поле "action" может быть null, если страна ограничивалась риторикой.
-Значение "tier" ДОЛЖНО быть одной из строк: "Diplomatic", "Economic", "ConventionalMilitary", "StrategicMilitary", "Nuclear"."#,
+Поле "action" может быть null — но пассивность стоит тебе очков влияния.
+"tier" ДОЛЖЕН быть одной из строк: "Diplomatic", "Economic", "ConventionalMilitary", "StrategicMilitary", "Nuclear"."#,
             name = config.id.0,
             scenario = scenario_description.trim(),
             mil = config.capabilities.military_power,
@@ -101,97 +99,68 @@ impl Agent {
 
     fn parse_tier(tier: &str) -> Option<ActionTier> {
         let result = ActionTier::from_str(tier);
-        if result.is_none() {
-            warn!("Unknown action tier from LLM: '{}'", tier);
-        }
+        if result.is_none() { warn!("Unknown action tier from LLM: '{}'", tier); }
         result
     }
 
-    /// Обрезает строку до max_chars символов по границе символа UTF-8,
-    /// добавляя «…» если текст был обрезан.
+    /// Обрезает строку до max_chars символов, добавляя «…».
     fn truncate_str(s: &str, max_chars: usize) -> String {
         let mut chars = s.chars();
         let truncated: String = chars.by_ref().take(max_chars).collect();
-        if chars.next().is_some() {
-            format!("{}…", truncated)
-        } else {
-            truncated
-        }
+        if chars.next().is_some() { format!("{}…", truncated) } else { truncated }
     }
 
-    /// Форматирует историю в два блока:
-    /// 1. «Историческая справка» — все ходы кроме последнего, только решения одной строкой.
-    /// 2. «Предыдущий ход» — последние AGENTS_PER_TURN сообщений с кратким превью хроники.
+    /// История в двух блоках:
+    /// - «Историческая справка»: все ходы кроме последнего → только решения одной строкой
+    /// - «Предыдущий ход»: последние AGENTS_PER_TURN сообщений, хроника передаётся целиком
     fn format_history(history: &[&Message]) -> String {
         if history.is_empty() {
             return "Нет предыдущих событий.".to_string();
         }
 
-        // Считаем 3 агентов за один ход; всё раньше — архив.
         const AGENTS_PER_TURN: usize = 3;
-
         let split = history.len().saturating_sub(AGENTS_PER_TURN);
         let (older, recent) = history.split_at(split);
-
         let mut sections: Vec<String> = Vec::new();
 
-        // — Историческая справка: только ключевые решения, без нарратива —
         if !older.is_empty() {
-            let summary_lines: Vec<String> = older
-                .iter()
-                .filter_map(|msg| {
-                    msg.action_proposal.as_ref().map(|a| {
-                        format!(
-                            "[{}] {} — {}{}",
-                            msg.from.0,
-                            a.tier.as_str(),
-                            Self::truncate_str(&a.description, 120),
-                            a.target
-                                .as_ref()
-                                .map(|t| format!(" → {}", t.0))
-                                .unwrap_or_default()
-                        )
-                    })
-                })
-                .collect();
+            let lines: Vec<String> = older.iter().filter_map(|msg| {
+                msg.action_proposal.as_ref().map(|a| format!(
+                    "[{}] {} — {}{}",
+                    msg.from.0, a.tier.as_str(),
+                    Self::truncate_str(&a.description, 120),
+                    a.target.as_ref().map(|t| format!(" → {}", t.0)).unwrap_or_default()
+                ))
+            }).collect();
 
-            if !summary_lines.is_empty() {
+            if !lines.is_empty() {
                 sections.push(format!(
                     "=== Историческая справка (ключевые решения прошлых периодов) ===\n{}",
-                    summary_lines.join("\n")
+                    lines.join("\n")
                 ));
             }
         }
 
-        // — Предыдущий ход: полная хроника + метаданные —
         if !recent.is_empty() {
-            let prev_entries: Vec<String> = recent
-                .iter()
-                .map(|msg| {
-                    let preview = &msg.content;
-                    let action_info = match &msg.action_proposal {
-                        Some(a) => format!(
-                            "\n  Решение: {} — {}{}",
-                            a.tier.as_str(),
-                            a.description,
-                            a.target
-                                .as_ref()
-                                .map(|t| format!(" (цель: {})", t.0))
-                                .unwrap_or_default()
-                        ),
-                        None => String::new(),
-                    };
-                    let proposal_info = match &msg.diplomatic_proposal {
-                        Some(p) => format!("\n  Инициатива: {}", Self::truncate_str(p, 150)),
-                        None => String::new(),
-                    };
-                    format!("--- [{}] ---\n{}{}{}", msg.from.0, preview, action_info, proposal_info)
-                })
-                .collect();
+            let entries: Vec<String> = recent.iter().map(|msg| {
+                let action_info = match &msg.action_proposal {
+                    Some(a) => format!(
+                        "\n  Решение: {} — {}{}",
+                        a.tier.as_str(), a.description,
+                        a.target.as_ref().map(|t| format!(" (цель: {})", t.0)).unwrap_or_default()
+                    ),
+                    None => String::new(),
+                };
+                let proposal_info = match &msg.diplomatic_proposal {
+                    Some(p) => format!("\n  Инициатива: {}", Self::truncate_str(p, 150)),
+                    None => String::new(),
+                };
+                format!("--- [{}] ---\n{}{}{}", msg.from.0, msg.content, action_info, proposal_info)
+            }).collect();
 
             sections.push(format!(
                 "=== Предыдущий ход ===\n{}",
-                prev_entries.join("\n\n")
+                entries.join("\n\n")
             ));
         }
 
@@ -204,38 +173,46 @@ impl Agent {
         history: &[Message],
         history_window: usize,
         period_label: &str,
+        power_status: &str,
+        external_event: Option<&str>,
     ) -> Result<Message> {
         let recent: Vec<&Message> = history.iter().rev().take(history_window).collect();
 
         let relationships_text: Vec<String> = state
-            .relationships
-            .iter()
+            .relationships.iter()
             .map(|(pair, val)| format!("{}: {}", pair, val))
             .collect();
 
+        let event_block = match external_event {
+            Some(e) if !e.is_empty() => format!(
+                "=== ВНЕШНЕЕ СОБЫТИЕ (введено игроком) ===\n{}\n\n",
+                e
+            ),
+            _ => String::new(),
+        };
+
         let context = format!(
-            "=== ТЕКУЩИЙ ПЕРИОД ===\n\
+            "{event_block}\
+             === ТЕКУЩИЙ ПЕРИОД ===\n\
              {period}\n\n\
              === СОСТОЯНИЕ МИРА ===\n\
              Ход: {turn} | Глобальная напряжённость: {tension}/100\n\
              Двусторонние отношения (отрицательные = союзники, положительные = враги): {rels}\n\n\
+             === СТАТУС МОЩИ ===\n\
+             {power}\n\n\
              === КОНТЕКСТ ПРЕДЫДУЩИХ ПЕРИОДОВ ===\n\
              {history}",
+            event_block = event_block,
             period = period_label,
             turn = state.turn_count,
             tension = state.tension_level,
-            rels = if relationships_text.is_empty() {
-                "данных нет".to_string()
-            } else {
-                relationships_text.join(", ")
-            },
+            rels = if relationships_text.is_empty() { "данных нет".to_string() }
+                   else { relationships_text.join(", ") },
+            power = power_status,
             history = Self::format_history(&recent),
         );
 
-        let response_text = self
-            .llm
-            .generate_content(&self.system_prompt, &context)
-            .await?;
+        let response_text = self.llm.generate_content(&self.system_prompt, &context).await?;
 
         let (message_text, diplomatic_proposal, hidden_action, action_proposal) =
             match serde_json::from_str::<AgentLLMResponse>(&response_text) {
@@ -253,7 +230,7 @@ impl Agent {
                     (parsed.message, parsed.diplomatic_proposal, parsed.hidden_action, action_proposal)
                 }
                 Err(e) => {
-                    warn!("Failed to parse LLM JSON response: {}. Raw: {}", e, response_text);
+                    warn!("Failed to parse LLM JSON: {}. Raw: {}", e, response_text);
                     (response_text, None, None, None)
                 }
             };
