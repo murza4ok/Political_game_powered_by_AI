@@ -15,7 +15,7 @@ pub struct LLMClient {
 }
 
 #[derive(Debug, Serialize, Clone)]
-struct LLMRequest {
+struct ChatRequest {
     model: String,
     messages: Vec<Message>,
     temperature: f32,
@@ -28,7 +28,7 @@ struct Message {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-struct LLMResponse {
+struct ChatResponse {
     choices: Option<Vec<Choice>>,
 }
 
@@ -45,12 +45,12 @@ struct ResponseMessage {
 impl LLMClient {
     pub fn new(config: LLMConfig) -> Result<Self> {
         let api_key = env::var("DEEPSEEK_API_KEY")
-            .context("DEEPSEEK_API_KEY not found in .env. Get one at https://platform.deepseek.com/api_keys")?;
+            .context("DEEPSEEK_API_KEY not found in .env. Get one at https://platform.deepseek.com/")?;
 
         let api_url = config
             .api_url
             .clone()
-            .unwrap_or_else(|| "https://api.deepseek.com/v1/chat/completions".into());
+            .unwrap_or_else(|| "https://api.deepseek.com/chat/completions".into());
 
         Ok(Self {
             client: Client::new(),
@@ -61,14 +61,14 @@ impl LLMClient {
     }
 
     pub async fn generate_content(&self, system_prompt: &str, user_message: &str) -> Result<String> {
-        self.generate(&system_prompt, &user_message).await
+        self.call_api(system_prompt, user_message).await
     }
 
     /// Отправляет запрос к LLM с повторными попытками при rate limit (429) или таймауте.
     /// Стратегия: до 3 повторных попыток с экспоненциальной задержкой 2s → 4s → 8s.
-    async fn generate(&self, system_prompt: &str, user_message: &str) -> Result<String> {
+    async fn call_api(&self, system_prompt: &str, user_message: &str) -> Result<String> {
         const MAX_RETRIES: u32 = 3;
-        const REQUEST_TIMEOUT_SECS: u64 = 30;
+        const REQUEST_TIMEOUT_SECS: u64 = 60;
         const RETRY_DELAYS: [u64; 3] = [2, 4, 8];
 
         let mut last_error = anyhow::anyhow!("No attempts made");
@@ -90,15 +90,12 @@ impl LLMClient {
                 Err(_elapsed) => {
                     warn!("LLM request timed out after {}s (attempt {})", REQUEST_TIMEOUT_SECS, attempt);
                     last_error = anyhow::anyhow!("Request timed out after {}s", REQUEST_TIMEOUT_SECS);
-                    // Таймаут — повторяем
                 }
                 Ok(Err(e)) if e.to_string().contains("LLM_RATE_LIMIT_429") => {
                     warn!("LLM rate limit hit (attempt {}): {}", attempt, e);
                     last_error = e;
-                    // Rate limit — повторяем с задержкой
                 }
                 Ok(Err(e)) => {
-                    // Любая другая ошибка — сразу возвращаем без retry
                     return Err(e);
                 }
                 Ok(Ok(text)) => return Ok(text),
@@ -109,7 +106,7 @@ impl LLMClient {
     }
 
     async fn send_request(&self, system_prompt: &str, user_message: &str) -> Result<String> {
-        let req_body = LLMRequest {
+        let req_body = ChatRequest {
             model: self.config.model.clone(),
             messages: vec![
                 Message {
@@ -146,16 +143,16 @@ impl LLMClient {
             anyhow::bail!("API Error {}: {}", status, error_text);
         }
 
-        let llm_resp: LLMResponse = response
+        let resp: ChatResponse = response
             .json()
             .await
-            .context("Failed to parse API response")?;
+            .context("Failed to parse DeepSeek API response")?;
 
-        llm_resp
+        resp
             .choices
             .and_then(|c| c.first().cloned())
             .and_then(|c| c.message)
             .and_then(|m| m.content)
-            .ok_or_else(|| anyhow::anyhow!("Empty response from API"))
+            .ok_or_else(|| anyhow::anyhow!("Empty response from DeepSeek API"))
     }
 }

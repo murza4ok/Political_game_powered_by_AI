@@ -16,6 +16,8 @@ pub struct SimulationConfig {
     pub tension_deltas: TensionDeltas,
 }
 
+fn default_turn_duration_hours() -> u32 { 720 }
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct GameConfig {
     pub max_turns: u32,
@@ -24,6 +26,9 @@ pub struct GameConfig {
     pub history_window: usize,
     /// Автоматическое снижение напряжённости за ход (0 = выключено)
     pub tension_decay_per_turn: i8,
+    /// Продолжительность хода в часах: 720 = ~1 месяц, 48, 12, 6
+    #[serde(default = "default_turn_duration_hours")]
+    pub turn_duration_hours: u32,
 }
 
 #[derive(Debug, Deserialize, Clone)]
