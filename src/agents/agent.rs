@@ -107,39 +107,95 @@ impl Agent {
         result
     }
 
+    /// Обрезает строку до max_chars символов по границе символа UTF-8,
+    /// добавляя «…» если текст был обрезан.
+    fn truncate_str(s: &str, max_chars: usize) -> String {
+        let mut chars = s.chars();
+        let truncated: String = chars.by_ref().take(max_chars).collect();
+        if chars.next().is_some() {
+            format!("{}…", truncated)
+        } else {
+            truncated
+        }
+    }
+
+    /// Форматирует историю в два блока:
+    /// 1. «Историческая справка» — все ходы кроме последнего, только решения одной строкой.
+    /// 2. «Предыдущий ход» — последние AGENTS_PER_TURN сообщений с кратким превью хроники.
     fn format_history(history: &[&Message]) -> String {
         if history.is_empty() {
             return "Нет предыдущих событий.".to_string();
         }
-        history
-            .iter()
-            .map(|msg| {
-                let action_info = match &msg.action_proposal {
-                    Some(a) => format!(
-                        "\n  Решение: {} — {}{}",
-                        a.tier.as_str(),
-                        a.description,
-                        a.target
-                            .as_ref()
-                            .map(|t| format!(" (цель: {})", t.0))
-                            .unwrap_or_default()
-                    ),
-                    None => String::new(),
-                };
-                let proposal_info = match &msg.diplomatic_proposal {
-                    Some(p) => format!("\n  Инициатива: {}", p),
-                    None => String::new(),
-                };
-                format!(
-                    "--- [{}] ---\n{}{}{}",
-                    msg.from.0,
-                    msg.content,
-                    action_info,
-                    proposal_info
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n\n")
+
+        // Считаем 3 агентов за один ход; всё раньше — архив.
+        const AGENTS_PER_TURN: usize = 3;
+
+        let split = history.len().saturating_sub(AGENTS_PER_TURN);
+        let (older, recent) = history.split_at(split);
+
+        let mut sections: Vec<String> = Vec::new();
+
+        // — Историческая справка: только ключевые решения, без нарратива —
+        if !older.is_empty() {
+            let summary_lines: Vec<String> = older
+                .iter()
+                .filter_map(|msg| {
+                    msg.action_proposal.as_ref().map(|a| {
+                        format!(
+                            "[{}] {} — {}{}",
+                            msg.from.0,
+                            a.tier.as_str(),
+                            Self::truncate_str(&a.description, 120),
+                            a.target
+                                .as_ref()
+                                .map(|t| format!(" → {}", t.0))
+                                .unwrap_or_default()
+                        )
+                    })
+                })
+                .collect();
+
+            if !summary_lines.is_empty() {
+                sections.push(format!(
+                    "=== Историческая справка (ключевые решения прошлых периодов) ===\n{}",
+                    summary_lines.join("\n")
+                ));
+            }
+        }
+
+        // — Предыдущий ход: полная хроника + метаданные —
+        if !recent.is_empty() {
+            let prev_entries: Vec<String> = recent
+                .iter()
+                .map(|msg| {
+                    let preview = &msg.content;
+                    let action_info = match &msg.action_proposal {
+                        Some(a) => format!(
+                            "\n  Решение: {} — {}{}",
+                            a.tier.as_str(),
+                            a.description,
+                            a.target
+                                .as_ref()
+                                .map(|t| format!(" (цель: {})", t.0))
+                                .unwrap_or_default()
+                        ),
+                        None => String::new(),
+                    };
+                    let proposal_info = match &msg.diplomatic_proposal {
+                        Some(p) => format!("\n  Инициатива: {}", Self::truncate_str(p, 150)),
+                        None => String::new(),
+                    };
+                    format!("--- [{}] ---\n{}{}{}", msg.from.0, preview, action_info, proposal_info)
+                })
+                .collect();
+
+            sections.push(format!(
+                "=== Предыдущий ход ===\n{}",
+                prev_entries.join("\n\n")
+            ));
+        }
+
+        sections.join("\n\n")
     }
 
     pub async fn process_turn(
@@ -163,7 +219,7 @@ impl Agent {
              === СОСТОЯНИЕ МИРА ===\n\
              Ход: {turn} | Глобальная напряжённость: {tension}/100\n\
              Двусторонние отношения (отрицательные = союзники, положительные = враги): {rels}\n\n\
-             === ХРОНИКИ ПРЕДЫДУЩИХ ПЕРИОДОВ (учитывай в своей хронике) ===\n\
+             === КОНТЕКСТ ПРЕДЫДУЩИХ ПЕРИОДОВ ===\n\
              {history}",
             period = period_label,
             turn = state.turn_count,
