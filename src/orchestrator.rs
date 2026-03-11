@@ -170,7 +170,7 @@ impl Orchestrator {
     pub async fn run_simulation(&mut self) -> Result<()> {
         info!("Starting simulation with {} agents", self.agents.len());
 
-        println!("=== Geopolitical Simulation ===");
+        println!("=== Агенты симуляции ===");
         for agent in &self.agents {
             let c = &agent.config;
             println!(

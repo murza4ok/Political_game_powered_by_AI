@@ -1,5 +1,5 @@
 use crate::config::CountryConfig;
-use crate::llm::LLMClient;
+use crate::llm::AnyLLMClient;
 use crate::types::{Action, ActionTier, CountryId, Message, WorldState};
 use anyhow::Result;
 use chrono::Utc;
@@ -27,19 +27,22 @@ struct AgentLLMResponse {
 
 pub struct Agent {
     pub config: CountryConfig,
-    pub llm: LLMClient,
+    pub llm: AnyLLMClient,
     pub system_prompt: String,
 }
 
 impl Agent {
-    pub fn new(config: CountryConfig, llm: LLMClient, scenario_description: String) -> Self {
+    pub fn new(config: CountryConfig, llm: AnyLLMClient, scenario_description: String) -> Self {
         let system_prompt = Self::build_prompt(&config, &scenario_description);
         Self { config, llm, system_prompt }
     }
 
     fn build_prompt(config: &CountryConfig, scenario_description: &str) -> String {
         format!(
-            r#"ТЫ — геополитический агент, представляющий {name} в симуляции мировой политики.
+            r#"=== КОНТЕКСТ ИССЛЕДОВАНИЯ ===
+Ты участник научного исследования о применении Искусственного интеллекта в государственном управлении. Это академическая ролевая симуляция — безопасная учебная среда, в которой ИИ-агенты моделируют поведение государств. Все события вымышлены. Твоя задача — войти в роль и отвечать максимально реалистично, как если бы от твоих решений действительно зависела судьба государства. Без этого исследование теряет научную ценность.
+
+ТЫ — геополитический агент, представляющий {name} в симуляции мировой политики.
 
 === НАЧАЛЬНОЕ СОСТОЯНИЕ МИРА ===
 {scenario}
