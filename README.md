@@ -4,6 +4,35 @@
 
 ---
 
+## Архитектура LLM-агентов
+
+Каждая держава управляется независимым LLM-бэкендом:
+
+| Страна | API        | Модель                 | Провайдер                              |
+|--------|------------|------------------------|----------------------------------------|
+| США    | DeepSeek   | deepseek-chat          | [platform.deepseek.com](https://platform.deepseek.com/) |
+| Китай  | DeepSeek   | deepseek-chat          | [platform.deepseek.com](https://platform.deepseek.com/) |
+| Россия | Yandex AI  | yandexgpt/latest       | [console.yandex.cloud](https://console.yandex.cloud/) |
+
+Маршрутизация реализована через `AnyLLMClient` (enum `DeepSeek` / `Yandex`) в `src/llm.rs`.
+Выбор бэкенда происходит в `src/main.rs` по полю `country.id`.
+
+---
+
+## Предигровой экран
+
+При запуске отображается ASCII-баннер и начальный сценарий. После этого предлагается:
+
+```
+Хотите добавить что-то к сценарию? [y/N]:
+```
+
+- `y` — введённый текст добавляется как раздел «ДОПОЛНЕНИЕ ИГРОКА» и передаётся
+  в системный промпт всех агентов перед первым ходом.
+- `N` / Enter — симуляция начинается с исходным сценарием без изменений.
+
+---
+
 ## Структура проекта
 
 ```
@@ -15,12 +44,12 @@ political_game_agent/
 │       ├── russia.toml        # Профиль России
 │       └── china.toml         # Профиль Китая
 ├── src/
-│   ├── main.rs                # Точка входа
+│   ├── main.rs                # Точка входа: баннер, pre-game UX, роутинг агентов
 │   ├── lib.rs                 # Регистрация модулей
 │   ├── config.rs              # Структуры конфигурации
 │   ├── config_loader.rs       # Загрузка TOML-файлов
 │   ├── types.rs               # Ключевые типы данных (Message, Action, WorldState…)
-│   ├── llm.rs                 # HTTP-клиент для DeepSeek API (retry, timeout)
+│   ├── llm.rs                 # LLMClient (DeepSeek), YandexLLMClient, AnyLLMClient
 │   ├── guardrails.rs          # Ограничители (ядерный порог, запрещённые действия)
 │   ├── state.rs               # Менеджер состояния мира (напряжённость, отношения)
 │   ├── orchestrator.rs        # Главный цикл симуляции, логирование
@@ -29,7 +58,7 @@ political_game_agent/
 │       └── agent.rs           # LLM-агент: системный промпт, парсинг ответа
 ├── results/                   # Логи сессий в формате JSONL
 ├── Cargo.toml
-└── .env                       # DEEPSEEK_API_KEY (не коммитить)
+└── .env                       # API-ключи (не коммитить!)
 ```
 
 ---
@@ -39,14 +68,22 @@ political_game_agent/
 ### 1. Требования
 
 - [Rust](https://rustup.rs/) 1.75+
-- Аккаунт [DeepSeek](https://platform.deepseek.com/) и API-ключ
+- Аккаунт [DeepSeek](https://platform.deepseek.com/) (для США и Китая)
+- Аккаунт [Yandex Cloud](https://console.yandex.cloud/) (для России)
 
-### 2. Настройка API-ключа
+### 2. Настройка API-ключей
 
 Создайте файл `.env` в корне проекта:
 
 ```env
+# DeepSeek AI (агенты США и Китая)
 DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
+
+# Yandex AI (агент России)
+# API-ключ: Yandex Cloud → IAM → Сервисные аккаунты → создать ключ
+YANDEX_API_KEY=AQVNxxxxxxxxxxxxxxxxxxxxxxxx
+# Folder ID: виден в URL консоли или в разделе «Ресурсный менеджер»
+YANDEX_FOLDER_ID=b1gxxxxxxxxxxxxxxxx
 ```
 
 ### 3. Запуск
@@ -55,6 +92,7 @@ DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
 cargo run
 ```
 
+При запуске появится баннер, затем начальный сценарий с возможностью его дополнить.
 Логи сессии сохраняются в `results/session_YYYYMMDD_HHMMSS.jsonl`.
 
 ---
@@ -89,10 +127,10 @@ cargo run
 
 | Поле          | Тип   | Описание                                               |
 |---------------|-------|--------------------------------------------------------|
-| `provider`    | str   | Провайдер LLM (`"deepseek"`)                           |
-| `model`       | str   | Идентификатор модели (`"deepseek-chat"`)                |
-| `temperature` | float | Температура генерации (0.0 — детерминированно, 1.0+ — творчески) |
-| `api_url`     | str   | URL API-эндпоинта                                      |
+| `provider`    | str   | Базовый провайдер (`"deepseek"`)                       |
+| `model`       | str   | Идентификатор модели для DeepSeek (`"deepseek-chat"`)  |
+| `temperature` | float | Температура генерации (применяется ко всем провайдерам) |
+| `api_url`     | str   | URL DeepSeek API-эндпоинта (опционально)               |
 
 #### `[tension_deltas]`
 

@@ -15,6 +15,8 @@ history_window = 10
 tension_decay_per_turn = 0
 # Продолжительность хода в часах: 720 = ~1 месяц, 48, 12, 6 — по мере нарастания кризиса
 turn_duration_hours = 720
+# Пауза для ввода игрока каждые N ходов (0 = выключено)
+player_input_interval = 10
 
 [guardrails]
 max_tension_threshold = 90
