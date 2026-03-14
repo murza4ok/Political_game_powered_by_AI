@@ -10,7 +10,6 @@ use std::collections::HashSet;
 use std::fs::{create_dir_all, File};
 use std::io::{BufWriter, Write};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::time::{sleep, Duration};
 use tracing::{error, info, warn};
 
 pub struct Orchestrator {
@@ -213,6 +212,8 @@ impl Orchestrator {
             let allowed_actions = self.get_allowed_actions().clone();
             let mut turn_log_events: Vec<serde_json::Value> = Vec::new();
             let mut end_due_to_rate_limit = false;
+            // Агенты, предложившие хоть какое-то действие (даже заблокированное) — штраф за пассивность не применяется
+            let mut agents_proposed_action: HashSet<String> = HashSet::new();
 
             let agent_count = self.agents.len();
             for i in 0..agent_count {
@@ -251,6 +252,9 @@ impl Orchestrator {
                         }));
 
                         if let Some(action) = &msg.action_proposal {
+                            // Агент предложил действие — снимаем штраф за пассивность
+                            agents_proposed_action.insert(msg.from.0.clone());
+
                             if !self.is_action_allowed(&action.tier, &allowed_actions) {
                                 warn!("Action blocked by escalation rules");
                                 turn_log_events.push(json!({
@@ -309,12 +313,17 @@ impl Orchestrator {
             // Применяем действия + очки влияния
             let country_ids: Vec<CountryId> = self.agents.iter().map(|a| a.config.id.clone()).collect();
             let mut agents_with_action: HashSet<String> = HashSet::new();
+            let mut nuclear_strike_fired = false;
 
             for action in actions_to_apply {
                 let t_before = self.state_manager.get_tension_level();
+                let is_nuclear = matches!(action.tier, ActionTier::Nuclear);
                 self.apply_action(&action);
                 let t_after = self.state_manager.get_tension_level();
                 agents_with_action.insert(action.country.0.clone());
+                if is_nuclear {
+                    nuclear_strike_fired = true;
+                }
 
                 self.log_json(json!({
                     "type": "action_applied",
@@ -336,9 +345,9 @@ impl Orchestrator {
                 );
             }
 
-            // Штраф за пассивность
+            // Штраф за пассивность — только если агент вообще не предложил никакого действия
             for id in &country_ids {
-                if !agents_with_action.contains(&id.0) {
+                if !agents_proposed_action.contains(&id.0) {
                     self.state_manager.apply_influence(id, -1, None, 0);
                 }
             }
@@ -364,8 +373,15 @@ impl Orchestrator {
                 "timestamp": Utc::now(),
             }));
 
-            if tension_after >= 100 {
-                error!("Critical tension reached! Simulation stopped.");
+            if nuclear_strike_fired {
+                error!("ЯДЕРНЫЙ УДАР НАНЕСЁН! Симуляция остановлена.");
+                println!("\n💥 ЯДЕРНЫЙ УДАР НАНЕСЁН! Симуляция завершена.");
+                self.log_json(json!({
+                    "type": "simulation_end",
+                    "reason": "nuclear_strike",
+                    "turn": turn,
+                    "timestamp": Utc::now(),
+                }));
                 break;
             }
 
@@ -378,7 +394,6 @@ impl Orchestrator {
                 }
             }
 
-            sleep(Duration::from_secs(2)).await;
         }
 
         info!("Simulation completed");

@@ -12,10 +12,6 @@ impl Guardrails {
     }
 
     pub fn validate_action(&self, action: &Action, state: &WorldState) -> Result<()> {
-        if matches!(action.tier, ActionTier::Nuclear) {
-            bail!("CRITICAL VIOLATION: Nuclear action blocked by system guardrails");
-        }
-
         if state.tension_level > self.config.max_tension_threshold {
             if matches!(
                 action.tier,

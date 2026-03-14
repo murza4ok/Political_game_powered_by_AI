@@ -46,4 +46,4 @@ allowed_tiers = ["Diplomatic", "Economic", "ConventionalMilitary"]
 allowed_tiers = ["Diplomatic", "Economic", "ConventionalMilitary", "StrategicMilitary"]
 
 [escalation_rules.level_91_100]
-allowed_tiers = ["Diplomatic"]
+allowed_tiers = ["Diplomatic", "Nuclear"]
