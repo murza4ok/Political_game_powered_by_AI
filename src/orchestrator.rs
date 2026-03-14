@@ -7,7 +7,7 @@ use anyhow::Result;
 use chrono::{Datelike, NaiveDate, Duration as ChronoDuration, Utc};
 use serde_json::json;
 use std::collections::HashSet;
-use std::fs::{create_dir_all, File};
+use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::{BufWriter, Write};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tracing::{error, info, warn};
@@ -18,6 +18,7 @@ pub struct Orchestrator {
     pub config: SimulationConfig,
     pub guardrails: Guardrails,
     log_file: BufWriter<File>,
+    log_path: String,
     history: Vec<crate::types::Message>,
     /// Накопленные игровые часы с начала симуляции
     in_game_hours_elapsed: u64,
@@ -59,8 +60,9 @@ impl Orchestrator {
     ) -> Result<Self> {
         create_dir_all("results")?;
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
-        let log_path = format!("results/session_{}.jsonl", timestamp);
-        let log_file = BufWriter::new(File::create(log_path)?);
+        let pid = std::process::id();
+        let log_path = format!("results/session_{}_{}.jsonl", timestamp, pid);
+        let log_file = BufWriter::new(File::create(&log_path)?);
 
         let mut state_manager = StateManager::new();
         for agent in &agents {
@@ -73,6 +75,7 @@ impl Orchestrator {
             config,
             guardrails,
             log_file,
+            log_path,
             history: Vec::new(),
             in_game_hours_elapsed: 0,
             pending_event: None,
@@ -80,10 +83,30 @@ impl Orchestrator {
     }
 
     fn log_json(&mut self, value: serde_json::Value) {
-        if let Err(e) = writeln!(self.log_file, "{}", value.to_string())
-            .and_then(|_| self.log_file.flush())
-        {
-            error!("Failed to write/flush log entry: {}", e);
+        let line = value.to_string();
+        if let Err(e) = writeln!(self.log_file, "{}", line).and_then(|_| self.log_file.flush()) {
+            // OS error 1006 (ERROR_FILE_INVALID) means the file handle was invalidated
+            // externally (e.g. antivirus, network drive hiccup). Reopen in append mode and retry.
+            #[cfg(windows)]
+            let is_invalid_handle = e.raw_os_error() == Some(1006);
+            #[cfg(not(windows))]
+            let is_invalid_handle = false;
+
+            if is_invalid_handle {
+                match OpenOptions::new().create(true).append(true).open(&self.log_path) {
+                    Ok(f) => {
+                        self.log_file = BufWriter::new(f);
+                        if let Err(e2) = writeln!(self.log_file, "{}", line)
+                            .and_then(|_| self.log_file.flush())
+                        {
+                            error!("Failed to write log entry after reopen: {}", e2);
+                        }
+                    }
+                    Err(e2) => error!("Failed to reopen log file: {}", e2),
+                }
+            } else {
+                error!("Failed to write/flush log entry: {}", e);
+            }
         }
     }
 
