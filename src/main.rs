@@ -29,6 +29,33 @@ fn read_line_sync() -> String {
     line.trim().to_string()
 }
 
+/// Спрашивает, хочет ли игрок делать паузы по ходу игры.
+/// Возвращает player_input_interval: 0 = без пауз, 1..=25 = каждые N ходов.
+fn ask_player_mode() -> u32 {
+    println!("══════════════════════════════════════════════════════════════════════════════");
+    print!("Хотите вносить изменения по ходу игры? [Y/n]: ");
+    let _ = io::stdout().flush();
+    let answer = read_line_sync();
+
+    if !answer.eq_ignore_ascii_case("y") {
+        println!("▶ Фоновый режим — игра пройдёт без пауз.\n");
+        return 0;
+    }
+
+    print!("Каждые сколько ходов делать паузу? (1–25, Enter = 10): ");
+    let _ = io::stdout().flush();
+    let num_str = read_line_sync();
+
+    let interval = if num_str.is_empty() {
+        10
+    } else {
+        num_str.parse::<u32>().unwrap_or(10).clamp(1, 25)
+    };
+
+    println!("▶ Интерактивный режим — пауза каждые {} ход(а).\n", interval);
+    interval
+}
+
 /// Показывает начальный сценарий и предлагает игроку добавить дополнение.
 /// Возвращает (возможно дополненный) текст сценария.
 fn run_pregame_flow(scenario_desc: &str) -> String {
@@ -68,7 +95,7 @@ async fn main() -> Result<()> {
     dotenv::dotenv().ok();
 
     // ── Phase A: загрузка конфига ──────────────────────────────────────────
-    let config_loader = ConfigLoader::load("config/scenario", "config/countries")?;
+    let mut config_loader = ConfigLoader::load("config/scenario", "config/countries")?;
 
     let llm_config = config_loader.simulation.llm.clone();
     let base_scenario = config_loader.simulation.initial_conditions.description.clone();
@@ -76,6 +103,8 @@ async fn main() -> Result<()> {
     // ── Phase B: pre-game UX ───────────────────────────────────────────────
     print_banner();
     let scenario_desc = run_pregame_flow(&base_scenario);
+    let player_interval = ask_player_mode();
+    config_loader.simulation.game.player_input_interval = player_interval;
 
     // ── Phase C: создание агентов с роутингом по LLM-провайдеру ──────────
     let deepseek_client = LLMClient::new(llm_config.clone())?;
